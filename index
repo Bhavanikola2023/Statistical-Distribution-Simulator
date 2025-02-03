@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Statistical Distribution Simulator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    #controls {
+      margin-bottom: 20px;
+    }
+    .control-group {
+      margin: 10px 0;
+    }
+    canvas {
+      border: 1px solid #ccc;
+    }
+    .overlay-controls {
+      margin-top: 15px;
+      padding: 10px;
+      border: 1px dashed #aaa;
+    }
+  </style>
+</head>
+<body>
+  <h1>Statistical Distribution Simulator</h1>
+  <div id="controls">
+    <div class="control-group">
+      <label for="mean1">Mean: <span id="meanVal1">0</span></label>
+      <input type="range" id="mean1" min="-10" max="10" step="0.1" value="0">
+    </div>
+    <div class="control-group">
+      <label for="std1">Standard Deviation: <span id="stdVal1">1</span></label>
+      <input type="range" id="std1" min="0.1" max="5" step="0.1" value="1">
+    </div>
+    <button id="addOverlayBtn">Add Overlay Distribution</button>
+    <!-- Container for overlay distribution controls -->
+    <div id="overlayContainer"></div>
+  </div>
+
+  <canvas id="distributionCanvas" width="800" height="400"></canvas>
+
+  <script>
+    // Get canvas and context
+    const canvas = document.getElementById("distributionCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // Distribution data: each object holds parameters and a color.
+    let distributions = [
+      {
+        id: 1,
+        mean: parseFloat(document.getElementById("mean1").value),
+        std: parseFloat(document.getElementById("std1").value),
+        color: "steelblue"
+      }
+    ];
+
+    // Update displayed slider values
+    function updateDisplay(id, mean, std) {
+      document.getElementById("meanVal" + id).textContent = mean;
+      document.getElementById("stdVal" + id).textContent = std;
+    }
+
+    // Normal distribution PDF function
+    function normalPDF(x, mean, std) {
+      return (1 / (std * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * Math.pow((x - mean) / std, 2));
+    }
+
+    // Calculate x-domain to cover all distributions (using ±4σ)
+    function getDomain() {
+      let domainMin = Infinity;
+      let domainMax = -Infinity;
+      distributions.forEach(d => {
+        domainMin = Math.min(domainMin, d.mean - 4 * d.std);
+        domainMax = Math.max(domainMax, d.mean + 4 * d.std);
+      });
+      // Add slight padding
+      const padding = (domainMax - domainMin) * 0.05;
+      return { min: domainMin - padding, max: domainMax + padding };
+    }
+
+    // Map x in domain to canvas x coordinate
+    function mapX(x, domain, canvasWidth) {
+      return ((x - domain.min) / (domain.max - domain.min)) * canvasWidth;
+    }
+
+    // Map PDF value to canvas y coordinate (inverted y-axis)
+    function mapY(y, maxY, canvasHeight) {
+      // Leave a small margin on top and bottom
+      const margin = canvasHeight * 0.1;
+      return canvasHeight - margin - (y / maxY) * (canvasHeight - 2 * margin);
+    }
+
+    // Draw all distributions on the canvas
+    function drawDistributions() {
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Determine global domain and maximum PDF value for scaling
+      const domain = getDomain();
+      let maxPDF = 0;
+      // Use a fine sampling resolution
+      const samplePoints = 800;
+      for (let i = 0; i < samplePoints; i++) {
+        const x = domain.min + (i / (samplePoints - 1)) * (domain.max - domain.min);
+        distributions.forEach(d => {
+          const pdf = normalPDF(x, d.mean, d.std);
+          if (pdf > maxPDF) maxPDF = pdf;
+        });
+      }
+
+      // Draw each distribution curve
+      distributions.forEach(d => {
+        ctx.beginPath();
+        ctx.strokeStyle = d.color;
+        // For a smooth curve, sample many points
+        for (let i = 0; i < samplePoints; i++) {
+          const xVal = domain.min + (i / (samplePoints - 1)) * (domain.max - domain.min);
+          const yVal = normalPDF(xVal, d.mean, d.std);
+          const xPixel = mapX(xVal, domain, canvas.width);
+          const yPixel = mapY(yVal, maxPDF, canvas.height);
+          if (i === 0) {
+            ctx.moveTo(xPixel, yPixel);
+          } else {
+            ctx.lineTo(xPixel, yPixel);
+          }
+        }
+        ctx.stroke();
+      });
+    }
+
+    // Event listeners for primary distribution sliders
+    document.getElementById("mean1").addEventListener("input", function() {
+      const mean = parseFloat(this.value);
+      distributions[0].mean = mean;
+      updateDisplay(1, mean, distributions[0].std);
+      drawDistributions();
+    });
+
+    document.getElementById("std1").addEventListener("input", function() {
+      const std = parseFloat(this.value);
+      distributions[0].std = std;
+      updateDisplay(1, distributions[0].mean, std);
+      drawDistributions();
+    });
+
+    // Handle adding an overlay distribution
+    let overlayCount = 0;
+    document.getElementById("addOverlayBtn").addEventListener("click", function() {
+      // Prevent multiple overlays for this example (you could allow more if desired)
+      if (overlayCount > 0) return;
+
+      overlayCount++;
+      const overlayId = 2;
+      // Create controls for overlay distribution
+      const overlayDiv = document.createElement("div");
+      overlayDiv.className = "overlay-controls";
+      overlayDiv.innerHTML = `
+        <h3>Overlay Distribution</h3>
+        <div class="control-group">
+          <label for="mean${overlayId}">Mean: <span id="meanVal${overlayId}">0</span></label>
+          <input type="range" id="mean${overlayId}" min="-10" max="10" step="0.1" value="0">
+        </div>
+        <div class="control-group">
+          <label for="std${overlayId}">Standard Deviation: <span id="stdVal${overlayId}">1</span></label>
+          <input type="range" id="std${overlayId}" min="0.1" max="5" step="0.1" value="1">
+        </div>
+      `;
+      document.getElementById("overlayContainer").appendChild(overlayDiv);
+
+      // Add the overlay distribution with a different color
+      distributions.push({
+        id: overlayId,
+        mean: 0,
+        std: 1,
+        color: "crimson"
+      });
+
+      // Add event listeners for overlay controls
+      document.getElementById("mean" + overlayId).addEventListener("input", function() {
+        const mean = parseFloat(this.value);
+        distributions[1].mean = mean;
+        updateDisplay(overlayId, mean, distributions[1].std);
+        drawDistributions();
+      });
+
+      document.getElementById("std" + overlayId).addEventListener("input", function() {
+        const std = parseFloat(this.value);
+        distributions[1].std = std;
+        updateDisplay(overlayId, distributions[1].mean, std);
+        drawDistributions();
+      });
+
+      // Initial update for overlay display
+      updateDisplay(overlayId, 0, 1);
+      drawDistributions();
+    });
+
+    // Initial drawing of the primary distribution
+    drawDistributions();
+  </script>
+</body>
+</html>
